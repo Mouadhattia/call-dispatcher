@@ -48,12 +48,44 @@ class TwilioService {
 
   async transferCall(callSid, destination, transferUrl) {
     try {
+      logger.info(`Attempting to transfer call ${callSid} to ${destination}`);
+      logger.info(`Using transfer URL: ${transferUrl}`);
+
+      // First, verify the call exists and is active
+      const callDetails = await this.client.calls(callSid).fetch();
+      logger.info("Current call status:", callDetails.status);
+
+      if (
+        callDetails.status === "completed" ||
+        callDetails.status === "failed"
+      ) {
+        throw new Error(
+          `Call ${callSid} is no longer active. Status: ${callDetails.status}`
+        );
+      }
+
+      // Generate TwiML for transfer
+      const twiml = new twilio.twiml.VoiceResponse();
+      twiml.dial(
+        {
+          callerId: process.env.TWILIO_PHONE_NUMBER,
+          timeout: 30,
+          record: "record-from-answer",
+          trim: "trim-silence",
+          action: `${transferUrl}/status`,
+        },
+        destination
+      );
+
+      // Perform the transfer
       const call = await this.client.calls(callSid).update({
-        url: transferUrl,
+        twiml: twiml.toString(),
         method: "POST",
-        to: destination,
       });
-      logger.info(`Transferred call ${callSid} to ${destination}`);
+
+      logger.info(`Transfer initiated for call ${callSid}`);
+      logger.info("Transfer response:", call);
+
       return call;
     } catch (error) {
       logger.error(`Error transferring call ${callSid}:`, error);
@@ -98,7 +130,7 @@ class TwilioService {
         record: "record-from-answer",
         trim: "trim-silence",
       },
-      destination
+      +21658828532
     );
 
     return twiml.toString();
